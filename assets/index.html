@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>First Bank PR — Messaging Portal</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f5f5;
+      color: #000;
+      min-height: 100vh;
+    }
+    .header {
+      background: #000;
+      color: white;
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .header img {
+      height: 48px;
+      width: auto;
+    }
+    .header-text h1 { font-size: 1.4rem; font-weight: 600; }
+    .header-text p { font-size: 0.8rem; opacity: 0.7; margin-top: 2px; }
+    .container {
+      max-width: 640px;
+      margin: 32px auto;
+      padding: 0 16px;
+    }
+    .section {
+      background: white;
+      border-radius: 8px;
+      padding: 24px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      border-left: 4px solid #008642;
+      transition: opacity 0.3s;
+    }
+    .section.disabled {
+      opacity: 0.4;
+      pointer-events: none;
+      border-left-color: #ccc;
+    }
+    .section h2 {
+      font-size: 1.1rem;
+      margin-bottom: 12px;
+      color: #000;
+    }
+    .step-badge {
+      display: inline-block;
+      background: #008642;
+      color: white;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      text-align: center;
+      line-height: 24px;
+      font-size: 0.75rem;
+      margin-right: 8px;
+    }
+    input[type="file"] {
+      display: block;
+      margin: 12px 0;
+    }
+    button {
+      background: #008642;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover { background: #006b35; }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    select {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      margin: 12px 0;
+    }
+    select:focus {
+      outline: none;
+      border-color: #008642;
+    }
+    .success {
+      background: #e8f5e9;
+      border: 1px solid #008642;
+      border-radius: 6px;
+      padding: 12px;
+      margin-top: 12px;
+      color: #006b35;
+      font-size: 0.875rem;
+    }
+    .error {
+      background: #ffebee;
+      border: 1px solid #ef9a9a;
+      border-radius: 6px;
+      padding: 12px;
+      margin-top: 12px;
+      color: #c62828;
+      font-size: 0.875rem;
+    }
+    .info {
+      font-size: 0.8rem;
+      color: #555;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <img src="/first_bank_pr.jpg" alt="First Bank PR">
+    <div class="header-text">
+      <h1>First Bank PR</h1>
+      <p>RCS/SMS Messaging Portal</p>
+    </div>
+  </div>
+
+  <div class="container">
+    <!-- Section 1: Upload CSV -->
+    <div class="section" id="section-upload">
+      <h2><span class="step-badge">1</span>Upload CSV</h2>
+      <p class="info">CSV must have a <code>phone_number</code> column and numbered columns (1, 2, 3...) for template variables.</p>
+      <input type="file" id="csv-file" accept=".csv">
+      <button id="btn-upload" disabled>Upload CSV</button>
+      <div id="upload-result"></div>
+    </div>
+
+    <!-- Section 2: Choose Template -->
+    <div class="section disabled" id="section-template">
+      <h2><span class="step-badge">2</span>Choose Template</h2>
+      <select id="template-select">
+        <option value="">Loading templates...</option>
+      </select>
+      <div id="template-info" class="info"></div>
+    </div>
+
+    <!-- Section 3: Send -->
+    <div class="section disabled" id="section-send">
+      <h2><span class="step-badge">3</span>Send Message</h2>
+      <p class="info" id="send-info"></p>
+      <button id="btn-send">Send RCS/SMS</button>
+      <div id="send-result"></div>
+    </div>
+  </div>
+
+  <script>
+    let csvData = null;
+    let templates = [];
+
+    // Fetch templates on page load
+    fetch('/list-templates')
+      .then(res => res.json())
+      .then(data => {
+        templates = data.templates || [];
+        const select = document.getElementById('template-select');
+        select.innerHTML = '<option value="">Select a template...</option>';
+        templates.forEach(t => {
+          const opt = document.createElement('option');
+          opt.value = t.sid;
+          opt.textContent = t.friendlyName + ' (' + t.numVariables + ' variables)';
+          select.appendChild(opt);
+        });
+      })
+      .catch(() => {
+        document.getElementById('template-select').innerHTML =
+          '<option value="">Error loading templates</option>';
+      });
+
+    // File input enable upload button
+    document.getElementById('csv-file').addEventListener('change', function () {
+      document.getElementById('btn-upload').disabled = !this.files.length;
+    });
+
+    // Upload CSV
+    document.getElementById('btn-upload').addEventListener('click', function () {
+      const file = document.getElementById('csv-file').files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        fetch('/upload-csv', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ csv: e.target.result })
+        })
+          .then(res => res.json())
+          .then(data => {
+            const resultDiv = document.getElementById('upload-result');
+            if (data.success) {
+              csvData = data.data;
+              resultDiv.innerHTML =
+                '<div class="success">' + data.data.length + ' rows loaded. Columns: ' +
+                data.headers.join(', ') + '</div>';
+              document.getElementById('section-template').classList.remove('disabled');
+            } else {
+              resultDiv.innerHTML = '<div class="error">' + data.error + '</div>';
+            }
+          })
+          .catch(err => {
+            document.getElementById('upload-result').innerHTML =
+              '<div class="error">Upload failed: ' + err.message + '</div>';
+          });
+      };
+      reader.readAsText(file);
+    });
+
+    // Template selection reveals send section
+    document.getElementById('template-select').addEventListener('change', function () {
+      if (this.value) {
+        document.getElementById('section-send').classList.remove('disabled');
+        const selected = templates.find(t => t.sid === this.value);
+        document.getElementById('template-info').textContent =
+          'Template expects ' + selected.numVariables + ' variable(s).';
+        if (csvData && csvData.length > 0) {
+          document.getElementById('send-info').textContent =
+            'Will send using data from matched row (or first row if no match).';
+        }
+      } else {
+        document.getElementById('section-send').classList.add('disabled');
+      }
+    });
+
+    // Send message
+    document.getElementById('btn-send').addEventListener('click', function () {
+      const templateSid = document.getElementById('template-select').value;
+      if (!templateSid || !csvData) return;
+
+      this.disabled = true;
+      this.textContent = 'Sending...';
+
+      fetch('/send-messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ templateSid: templateSid, csvData: JSON.stringify(csvData) })
+      })
+        .then(res => res.json())
+        .then(data => {
+          const resultDiv = document.getElementById('send-result');
+          if (data.success) {
+            resultDiv.innerHTML =
+              '<div class="success">Message sent! SID: ' + data.messageSid + '</div>';
+          } else {
+            resultDiv.innerHTML = '<div class="error">Send failed: ' + data.error + '</div>';
+          }
+          this.disabled = false;
+          this.textContent = 'Send RCS/SMS';
+        })
+        .catch(err => {
+          document.getElementById('send-result').innerHTML =
+            '<div class="error">Send failed: ' + err.message + '</div>';
+          this.disabled = false;
+          this.textContent = 'Send RCS/SMS';
+        });
+    });
+  </script>
+</body>
+</html>
