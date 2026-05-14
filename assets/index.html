@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>First Bank PR — Messaging Portal</title>
+  <title>First Bank PR — Portal de Mensajería</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -123,34 +123,36 @@
     <img src="/first_bank_pr.jpg" alt="First Bank PR">
     <div class="header-text">
       <h1>First Bank PR</h1>
-      <p>RCS/SMS Messaging Portal</p>
+      <p>Portal de Mensajería RCS/SMS</p>
     </div>
   </div>
 
   <div class="container">
     <!-- Section 1: Upload CSV -->
     <div class="section" id="section-upload">
-      <h2><span class="step-badge">1</span>Upload CSV</h2>
-      <p class="info">CSV must have a <code>phone_number</code> column and numbered columns (1, 2, 3...) for template variables.</p>
-      <input type="file" id="csv-file" accept=".csv">
-      <button id="btn-upload" disabled>Upload CSV</button>
+      <h2><span class="step-badge">1</span>Subir CSV</h2>
+      <p class="info">El CSV debe tener una columna <code>phone_number</code> y columnas numeradas (1, 2, 3...) para las variables de la plantilla.</p>
+      <input type="file" id="csv-file" accept=".csv" style="display:none;">
+      <button type="button" id="btn-choose-file">Elegir Archivo</button>
+      <span id="file-name" style="margin-left:8px;font-size:0.85rem;color:#555;"></span>
+      <button id="btn-upload" disabled>Subir CSV</button>
       <div id="upload-result"></div>
     </div>
 
     <!-- Section 2: Choose Template -->
     <div class="section disabled" id="section-template">
-      <h2><span class="step-badge">2</span>Choose Template</h2>
+      <h2><span class="step-badge">2</span>Elegir Plantilla</h2>
       <select id="template-select">
-        <option value="">Loading templates...</option>
+        <option value="">Cargando plantillas...</option>
       </select>
       <div id="template-info" class="info"></div>
     </div>
 
     <!-- Section 3: Send -->
     <div class="section disabled" id="section-send">
-      <h2><span class="step-badge">3</span>Send Message</h2>
+      <h2><span class="step-badge">3</span>Enviar Mensaje</h2>
       <p class="info" id="send-info"></p>
-      <button id="btn-send">Send RCS/SMS</button>
+      <button id="btn-send">Enviar RCS/SMS</button>
       <div id="send-result"></div>
     </div>
   </div>
@@ -165,7 +167,7 @@
       .then(data => {
         templates = data.templates || [];
         const select = document.getElementById('template-select');
-        select.innerHTML = '<option value="">Select a template...</option>';
+        select.innerHTML = '<option value="">Seleccionar plantilla...</option>';
         templates.forEach(t => {
           const opt = document.createElement('option');
           opt.value = t.sid;
@@ -175,12 +177,18 @@
       })
       .catch(() => {
         document.getElementById('template-select').innerHTML =
-          '<option value="">Error loading templates</option>';
+          '<option value="">Error al cargar plantillas</option>';
       });
+
+    // Custom file chooser button
+    document.getElementById('btn-choose-file').addEventListener('click', function () {
+      document.getElementById('csv-file').click();
+    });
 
     // File input enable upload button
     document.getElementById('csv-file').addEventListener('change', function () {
       document.getElementById('btn-upload').disabled = !this.files.length;
+      document.getElementById('file-name').textContent = this.files.length ? this.files[0].name : '';
     });
 
     // Upload CSV
@@ -200,9 +208,14 @@
             const resultDiv = document.getElementById('upload-result');
             if (data.success) {
               csvData = data.data;
+              let tableHtml = '<table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:0.8rem;">';
+              tableHtml += '<tr>' + data.headers.map(h => '<th style="border:1px solid #ddd;padding:6px;background:#f0f0f0;text-align:left;">' + h + '</th>').join('') + '</tr>';
+              data.data.forEach(row => {
+                tableHtml += '<tr>' + data.headers.map(h => '<td style="border:1px solid #ddd;padding:6px;">' + (row[h] || '') + '</td>').join('') + '</tr>';
+              });
+              tableHtml += '</table>';
               resultDiv.innerHTML =
-                '<div class="success">' + data.data.length + ' rows loaded. Columns: ' +
-                data.headers.join(', ') + '</div>';
+                '<div class="success">' + data.data.length + ' filas cargadas.</div>' + tableHtml;
               document.getElementById('section-template').classList.remove('disabled');
             } else {
               resultDiv.innerHTML = '<div class="error">' + data.error + '</div>';
@@ -210,7 +223,7 @@
           })
           .catch(err => {
             document.getElementById('upload-result').innerHTML =
-              '<div class="error">Upload failed: ' + err.message + '</div>';
+              '<div class="error">Error al subir: ' + err.message + '</div>';
           });
       };
       reader.readAsText(file);
@@ -222,10 +235,10 @@
         document.getElementById('section-send').classList.remove('disabled');
         const selected = templates.find(t => t.sid === this.value);
         document.getElementById('template-info').textContent =
-          'Template expects ' + selected.numVariables + ' variable(s).';
+          'La plantilla requiere ' + selected.numVariables + ' variable(s).';
         if (csvData && csvData.length > 0) {
           document.getElementById('send-info').textContent =
-            'Will send using data from matched row (or first row if no match).';
+            'Se enviará usando los datos de la fila correspondiente (o la primera fila si no hay coincidencia).';
         }
       } else {
         document.getElementById('section-send').classList.add('disabled');
@@ -238,7 +251,7 @@
       if (!templateSid || !csvData) return;
 
       this.disabled = true;
-      this.textContent = 'Sending...';
+      this.textContent = 'Enviando...';
 
       fetch('/send-messages', {
         method: 'POST',
@@ -249,19 +262,23 @@
         .then(data => {
           const resultDiv = document.getElementById('send-result');
           if (data.success) {
+            const sids = data.results.map(r => r.messageSid).join(', ');
             resultDiv.innerHTML =
-              '<div class="success">Message sent! SID: ' + data.messageSid + '</div>';
+              '<div class="success">Mensajes enviados (' + data.results.length + ')! SIDs: ' + sids + '</div>';
           } else {
-            resultDiv.innerHTML = '<div class="error">Send failed: ' + data.error + '</div>';
+            const errors = data.results
+              ? data.results.filter(r => !r.success).map(r => r.to + ': ' + r.error).join('; ')
+              : data.error;
+            resultDiv.innerHTML = '<div class="error">Error al enviar: ' + errors + '</div>';
           }
           this.disabled = false;
-          this.textContent = 'Send RCS/SMS';
+          this.textContent = 'Enviar RCS/SMS';
         })
         .catch(err => {
           document.getElementById('send-result').innerHTML =
-            '<div class="error">Send failed: ' + err.message + '</div>';
+            '<div class="error">Error al enviar: ' + err.message + '</div>';
           this.disabled = false;
-          this.textContent = 'Send RCS/SMS';
+          this.textContent = 'Enviar RCS/SMS';
         });
     });
   </script>

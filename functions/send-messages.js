@@ -6,28 +6,37 @@ exports.handler = async function (context, event, callback) {
   }
 
   const rows = typeof csvData === 'string' ? JSON.parse(csvData) : csvData;
-  const demoNumber = context.DEMO_PHONE_NUMBER;
+  const firstRow = rows[0];
 
-  const matchedRow = rows.find((row) => row.phone_number === demoNumber) || rows[0];
+  if (!firstRow) {
+    return callback(null, { success: false, error: 'CSV has no data rows' });
+  }
 
   const contentVariables = {};
-  for (const key of Object.keys(matchedRow)) {
+  for (const key of Object.keys(firstRow)) {
     if (key !== 'phone_number') {
-      contentVariables[key] = matchedRow[key];
+      contentVariables[key] = firstRow[key];
     }
   }
 
-  try {
-    const client = context.getTwilioClient();
-    const message = await client.messages.create({
-      to: demoNumber,
-      messagingServiceSid: context.MESSAGING_SERVICE_SID,
-      contentSid: templateSid,
-      contentVariables: JSON.stringify(contentVariables)
-    });
+  const demoNumbers = [context.DEMO_PHONE_NUMBER_1, context.DEMO_PHONE_NUMBER_2].filter(Boolean);
+  const results = [];
+  const client = context.getTwilioClient();
 
-    callback(null, { success: true, messageSid: message.sid });
-  } catch (err) {
-    callback(null, { success: false, error: err.message });
+  for (const demoNumber of demoNumbers) {
+    try {
+      const message = await client.messages.create({
+        to: demoNumber,
+        messagingServiceSid: context.MESSAGING_SERVICE_SID,
+        contentSid: templateSid,
+        contentVariables: JSON.stringify(contentVariables)
+      });
+      results.push({ to: demoNumber, success: true, messageSid: message.sid });
+    } catch (err) {
+      results.push({ to: demoNumber, success: false, error: err.message });
+    }
   }
+
+  const allSucceeded = results.every((r) => r.success);
+  callback(null, { success: allSucceeded, results });
 };
