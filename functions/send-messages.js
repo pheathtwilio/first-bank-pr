@@ -11,12 +11,14 @@ exports.handler = async function (context, event, callback) {
     return callback(null, { success: false, error: 'CSV has no data rows' });
   }
 
-  const demoNumbers = [context.DEMO_PHONE_NUMBER_1, context.DEMO_PHONE_NUMBER_2].filter(Boolean);
+  const demoRows = rows.slice(0, 2);
   const results = [];
   const client = context.getTwilioClient();
 
-  for (let i = 0; i < demoNumbers.length; i++) {
-    const row = rows[i] || rows[0];
+  for (const row of demoRows) {
+    const to = row.phone_number;
+    if (!to) continue;
+
     const contentVariables = {};
     for (const key of Object.keys(row)) {
       if (key !== 'phone_number') {
@@ -26,14 +28,14 @@ exports.handler = async function (context, event, callback) {
 
     try {
       const message = await client.messages.create({
-        to: demoNumbers[i],
+        to,
         messagingServiceSid: context.MESSAGING_SERVICE_SID,
         contentSid: templateSid,
         contentVariables: JSON.stringify(contentVariables)
       });
-      results.push({ to: demoNumbers[i], success: true, messageSid: message.sid });
+      results.push({ to, success: true, messageSid: message.sid });
     } catch (err) {
-      results.push({ to: demoNumbers[i], success: false, error: err.message });
+      results.push({ to, success: false, error: err.message });
     }
   }
 
